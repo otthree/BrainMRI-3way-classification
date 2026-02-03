@@ -1,8 +1,21 @@
+# mac
 .DS_Store
-.*/__pycache__
-.*pyc
-ViT/data/*
-Data/*
-PreprocessedData/*
+
+# python
+__pycache__/
+*.pyc
+
+# data (중요)
+data/
+images/
+ViT/data/
+PreprocessedData/
+Data/
+
+# models & outputs
 *.pt
+*.pth
+*.ckpt
+
+# notebooks
 *.ipynb
