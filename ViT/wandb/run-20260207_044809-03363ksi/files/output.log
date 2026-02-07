@@ -1,0 +1,135 @@
+Total number of images in train, val and test set are, 3139, 671, 677
+		CN	MCI	AD
+Train	: 	1207	1029	903
+Val	: 	258	220	193
+Test	: 	260	222	195
+
+Shape of images and labels of a signle batch is torch.Size([3, 1, 192, 192, 192]) and torch.Size([3]) respectively.
+ViTForClassfication(
+  (embedding): Embeddings(
+    (patch_embeddings): PatchEmbeddings(
+      (conv_1): ConvBlock(
+        (conv): Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+        (bn): BatchNorm3d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (act): ReLU()
+        (maxpool): MaxPool3d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      )
+      (conv_2): ConvBlock(
+        (conv): Conv3d(32, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+        (bn): BatchNorm3d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (act): ReLU()
+        (maxpool): MaxPool3d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      )
+      (conv_3): ConvBlock(
+        (conv): Conv3d(64, 128, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+        (bn): BatchNorm3d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (act): ReLU()
+        (maxpool): MaxPool3d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      )
+      (conv_4): ConvBlock(
+        (conv): Conv3d(128, 256, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+        (bn): BatchNorm3d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (act): ReLU()
+        (maxpool): MaxPool3d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      )
+      (conv_5): ConvBlock(
+        (conv): Conv3d(256, 512, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1))
+        (bn): BatchNorm3d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (act): ReLU()
+        (maxpool): MaxPool3d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      )
+    )
+    (dropout): Dropout(p=0.25, inplace=False)
+  )
+  (encoder): Encoder(
+    (blocks): ModuleList(
+      (0-2): 3 x Block(
+        (attention): FasterMultiHeadAttention(
+          (qkv_projection): Linear(in_features=216, out_features=648, bias=True)
+          (attn_dropout): Dropout(p=0.25, inplace=False)
+          (output_projection): Linear(in_features=216, out_features=216, bias=True)
+          (output_dropout): Dropout(p=0.25, inplace=False)
+        )
+        (layernorm_1): LayerNorm((216,), eps=1e-05, elementwise_affine=True)
+        (mlp): MLP(
+          (dense_1): Linear(in_features=216, out_features=648, bias=True)
+          (activation): NewGELUActivation()
+          (dense_2): Linear(in_features=648, out_features=216, bias=True)
+          (dropout): Dropout(p=0.25, inplace=False)
+        )
+        (layernorm_2): LayerNorm((216,), eps=1e-05, elementwise_affine=True)
+      )
+    )
+  )
+  (attention_pool): Linear(in_features=216, out_features=1, bias=True)
+  (classifier): Linear(in_features=432, out_features=3, bias=True)
+)
++-----------------------------------------------------+------------+
+|                       Modules                       | Parameters |
++-----------------------------------------------------+------------+
+|                 embedding.cls_token                 |    216     |
+|            embedding.position_embeddings            |   110808   |
+|    embedding.patch_embeddings.conv_1.conv.weight    |    864     |
+|     embedding.patch_embeddings.conv_1.conv.bias     |     32     |
+|     embedding.patch_embeddings.conv_1.bn.weight     |     32     |
+|      embedding.patch_embeddings.conv_1.bn.bias      |     32     |
+|    embedding.patch_embeddings.conv_2.conv.weight    |   55296    |
+|     embedding.patch_embeddings.conv_2.conv.bias     |     64     |
+|     embedding.patch_embeddings.conv_2.bn.weight     |     64     |
+|      embedding.patch_embeddings.conv_2.bn.bias      |     64     |
+|    embedding.patch_embeddings.conv_3.conv.weight    |   221184   |
+|     embedding.patch_embeddings.conv_3.conv.bias     |    128     |
+|     embedding.patch_embeddings.conv_3.bn.weight     |    128     |
+|      embedding.patch_embeddings.conv_3.bn.bias      |    128     |
+|    embedding.patch_embeddings.conv_4.conv.weight    |   884736   |
+|     embedding.patch_embeddings.conv_4.conv.bias     |    256     |
+|     embedding.patch_embeddings.conv_4.bn.weight     |    256     |
+|      embedding.patch_embeddings.conv_4.bn.bias      |    256     |
+|    embedding.patch_embeddings.conv_5.conv.weight    |  3538944   |
+|     embedding.patch_embeddings.conv_5.conv.bias     |    512     |
+|     embedding.patch_embeddings.conv_5.bn.weight     |    512     |
+|      embedding.patch_embeddings.conv_5.bn.bias      |    512     |
+|   encoder.blocks.0.attention.qkv_projection.weight  |   139968   |
+|    encoder.blocks.0.attention.qkv_projection.bias   |    648     |
+| encoder.blocks.0.attention.output_projection.weight |   46656    |
+|  encoder.blocks.0.attention.output_projection.bias  |    216     |
+|         encoder.blocks.0.layernorm_1.weight         |    216     |
+|          encoder.blocks.0.layernorm_1.bias          |    216     |
+|         encoder.blocks.0.mlp.dense_1.weight         |   139968   |
+|          encoder.blocks.0.mlp.dense_1.bias          |    648     |
+|         encoder.blocks.0.mlp.dense_2.weight         |   139968   |
+|          encoder.blocks.0.mlp.dense_2.bias          |    216     |
+|         encoder.blocks.0.layernorm_2.weight         |    216     |
+|          encoder.blocks.0.layernorm_2.bias          |    216     |
+|   encoder.blocks.1.attention.qkv_projection.weight  |   139968   |
+|    encoder.blocks.1.attention.qkv_projection.bias   |    648     |
+| encoder.blocks.1.attention.output_projection.weight |   46656    |
+|  encoder.blocks.1.attention.output_projection.bias  |    216     |
+|         encoder.blocks.1.layernorm_1.weight         |    216     |
+|          encoder.blocks.1.layernorm_1.bias          |    216     |
+|         encoder.blocks.1.mlp.dense_1.weight         |   139968   |
+|          encoder.blocks.1.mlp.dense_1.bias          |    648     |
+|         encoder.blocks.1.mlp.dense_2.weight         |   139968   |
+|          encoder.blocks.1.mlp.dense_2.bias          |    216     |
+|         encoder.blocks.1.layernorm_2.weight         |    216     |
+|          encoder.blocks.1.layernorm_2.bias          |    216     |
+|   encoder.blocks.2.attention.qkv_projection.weight  |   139968   |
+|    encoder.blocks.2.attention.qkv_projection.bias   |    648     |
+| encoder.blocks.2.attention.output_projection.weight |   46656    |
+|  encoder.blocks.2.attention.output_projection.bias  |    216     |
+|         encoder.blocks.2.layernorm_1.weight         |    216     |
+|          encoder.blocks.2.layernorm_1.bias          |    216     |
+|         encoder.blocks.2.mlp.dense_1.weight         |   139968   |
+|          encoder.blocks.2.mlp.dense_1.bias          |    648     |
+|         encoder.blocks.2.mlp.dense_2.weight         |   139968   |
+|          encoder.blocks.2.mlp.dense_2.bias          |    216     |
+|         encoder.blocks.2.layernorm_2.weight         |    216     |
+|          encoder.blocks.2.layernorm_2.bias          |    216     |
+|                attention_pool.weight                |    216     |
+|                 attention_pool.bias                 |     1      |
+|                  classifier.weight                  |    1296    |
+|                   classifier.bias                   |     3      |
++-----------------------------------------------------+------------+
+Total Trainable Params: 6223996
+Total parameters: 6223996, Trainable Parameters 6223996
+Total parameters: 6.223996M, Trainable Parameters 6.223996M

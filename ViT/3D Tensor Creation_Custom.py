@@ -19,17 +19,11 @@ gc.collect()
 torch.cuda.empty_cache()
 
 # Configuration
-DATA_CSV_PATH = '/Users/othree/Cognitive Reserve Modeling/Data/ADNI_master_merged_12-17-2025.csv'
-OUTPUT_PATH = '/Users/othree/Cognitive Reserve Modeling/Code/Alzheimer-Detection-with-3D-HCCT-main/data'
-MRI_BASE_PATH = '/Users/othree/Cognitive Reserve Modeling/Data'
+DATA_CSV_PATH = '/workspace/pumpkinlab-storage-dhl/tabular/ADNI_master_merged_12-17-2025.csv'
+OUTPUT_PATH = '/workspace/BrainMRI-3way-classification/data'
+MRI_BASE_PATH = '/workspace/pumpkinlab-storage-dhl'
 MRI_FOLDERS = [
-    'ADNI_Download',
-    'ADNI_Download 2',
-    'ADNI_Download 3',
-    'ADNI_Download 4',
-    'ADNI_Download 5',
-    'ADNI_Download 6',
-    'ADNI_Download 7'
+    'all_brain_mni152_1mm_02_04_2026'
 ]
 
 config = {
@@ -262,7 +256,7 @@ class ADNIAlzheimerDataset(Dataset):
         return image, label
 
 
-def saveTensors(dataset, data_type):
+def saveTensors(dataset, data_type, delete_original=False):
     data_path = os.path.join(OUTPUT_PATH, '3D_tensors', data_type)
     if not os.path.exists(data_path):
         os.makedirs(data_path)
@@ -284,6 +278,7 @@ def saveTensors(dataset, data_type):
 
     start = time.time()
     skipped = 0
+    deleted = 0
 
     for idx in range(len(dataset)):
         tensor, label = dataset.__getitem__(idx)
@@ -296,6 +291,13 @@ def saveTensors(dataset, data_type):
         tensor_path = f"{data_path}/{labels[label]}/{idx}.pt"
         torch.save(tensor, tensor_path)
 
+        # Delete original file after successful save
+        if delete_original:
+            original_path = dataset.df['image_path'][idx]
+            if os.path.exists(original_path):
+                os.remove(original_path)
+                deleted += 1
+
         if (idx + 1) % 100 == 0:
             print(f"{idx + 1} images done.")
 
@@ -305,6 +307,8 @@ def saveTensors(dataset, data_type):
 
     if skipped > 0:
         print(f"Warning: {skipped} images were skipped due to file not found errors.")
+    if deleted > 0:
+        print(f"Deleted {deleted} original files to free disk space.")
 
 
 if __name__ == "__main__":
@@ -329,12 +333,12 @@ if __name__ == "__main__":
     print("Saving tensors...")
     print("="*60)
 
-    # Save tensors
-    saveTensors(test_dataset, 'Test')
+    # Save tensors (delete_original=True to free disk space after processing)
+    saveTensors(test_dataset, 'Test', delete_original=True)
     print("\n")
-    saveTensors(val_dataset, 'Val')
+    saveTensors(val_dataset, 'Val', delete_original=True)
     print("\n")
-    saveTensors(train_dataset, 'Train')
+    saveTensors(train_dataset, 'Train', delete_original=True)
 
     print("\n" + "="*60)
     print("Processing complete!")

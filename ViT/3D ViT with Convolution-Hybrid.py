@@ -500,9 +500,9 @@ class FolderDataset(Dataset):
         return tensor, label
     
 def prepare_data(batch_size=4, num_workers=2, train_sample_size=None, test_sample_size=None):
-    train_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Train')
-    val_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Val')
-    test_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Test')
+    train_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Train')
+    val_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Val')
+    test_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Test')
 
     train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
     valid_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True)
@@ -622,7 +622,9 @@ def visualize_images(dataset):
 # In[7]:
 
 
-train_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Train')
+import matplotlib
+matplotlib.use('Agg')
+train_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Train')
 visualize_images(train_dataset)
 
 
@@ -752,9 +754,9 @@ train_loader, valid_loader, test_loader, class_dist = prepare_data()
 
 print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
 
-assert len(train_loader.dataset)==1526
-assert len(valid_loader.dataset)==326
-assert len(test_loader.dataset)==330
+assert len(train_loader.dataset)==3139
+assert len(valid_loader.dataset)==671
+assert len(test_loader.dataset)==677
 
 print(f"\t\tCN\tMCI\tAD")
 for key in class_dist.keys():
@@ -806,7 +808,7 @@ wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc})
 
 
 #@title Plot training Results
-config, model, train_losses, val_losses, train_acces,val_acces = load_experiment(f"../experiments/{config['exp_name']}/")
+config, model, train_losses, val_losses, train_acces,val_acces = load_experiment(config['exp_name'])
 
 #import matplotlib.pyplot as plt
 # Create two subplots of train/test losses and accuracies
@@ -842,7 +844,7 @@ print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
 
 # Load the model
 final_model = ViTForClassfication(config)
-final_model.load_state_dict(torch.load(f"/home/admin1/Arindam/Alzheimer/ViT/experiments/3D ViT Final/model_best_{config['model_name']}.pt"))
+final_model.load_state_dict(torch.load(f"experiments/3D ViT Final/model_best_{config['model_name']}.pt"))
    
 trainer = Trainer(final_model, optimizer, loss_fn, config['exp_name'], device=device)
 test_loss, test_acc = trainer.evaluate(test_loader)
