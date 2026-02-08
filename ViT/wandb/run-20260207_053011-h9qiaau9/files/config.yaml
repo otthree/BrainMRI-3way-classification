@@ -1,0 +1,93 @@
+_wandb:
+    value:
+        cli_version: 0.24.2
+        e:
+            dmeqn2xru6udqy5bqkrlb0y5fy1hg52b:
+                codePath: ViT/3D ViT with Convolution-Hybrid.py
+                codePathLocal: 3D ViT with Convolution-Hybrid.py
+                cpu_count: 64
+                cpu_count_logical: 64
+                cudaVersion: "12.6"
+                disk:
+                    /:
+                        total: "161061273600"
+                        used: "142455914496"
+                email: xfkwl00214xfkwl00214@gmail.com
+                executable: /venv/main/bin/python3
+                git:
+                    commit: 65fa8433e6fcad603bb7096149b9c98560c8c0e5
+                    remote: https://github.com/otthree/BrainMRI-3way-classification.git
+                gpu: NVIDIA A100-SXM4-40GB
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "42949672960"
+                      name: NVIDIA A100-SXM4-40GB
+                      uuid: GPU-f61d1e12-c2e8-a98b-e666-eafa2bc43143
+                host: 477cde7ebba1
+                memory:
+                    total: "540882096128"
+                os: Linux-5.15.0-94-generic-x86_64-with-glibc2.39
+                program: /workspace/BrainMRI-3way-classification/ViT/3D ViT with Convolution-Hybrid.py
+                python: CPython 3.12.12
+                root: /workspace/BrainMRI-3way-classification/ViT
+                startedAt: "2026-02-07T05:30:11.150803Z"
+                writerId: dmeqn2xru6udqy5bqkrlb0y5fy1hg52b
+        m: []
+        python_version: 3.12.12
+        t:
+            "1":
+                - 1
+                - 5
+                - 53
+            "2":
+                - 1
+                - 5
+                - 41
+                - 53
+            "3":
+                - 13
+                - 16
+            "4": 3.12.12
+            "5": 0.24.2
+            "12": 0.24.2
+            "13": linux-x86_64
+attention_probs_dropout_prob:
+    value: 0.25
+batch_size:
+    value: 3
+epochs:
+    value: 100
+exp_name:
+    value: 3D ViT Final
+hidden_dropout_prob:
+    value: 0.25
+hidden_size:
+    value: 216
+image_size:
+    value: 192
+initializer_range:
+    value: 0.02
+intermediate_size:
+    value: 648
+lr:
+    value: 8e-05
+model_name:
+    value: Hybrid
+num_attention_heads:
+    value: 8
+num_channels:
+    value: 1
+num_classes:
+    value: 3
+num_hidden_layers:
+    value: 3
+patch_size:
+    value: 6
+qkv_bias:
+    value: true
+save_model_every:
+    value: 0
+use_faster_attention:
+    value: true
