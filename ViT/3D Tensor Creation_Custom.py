@@ -130,95 +130,18 @@ class DataPaths():
         print(f"\nClass distribution:")
         print(f"  CN: {len(cn_mri_scan_list)}, MCI: {len(mci_mri_scan_list)}, AD: {len(ad_mri_scan_list)}")
 
-        # --- Patient-wise split to prevent data leakage ---
-        from collections import defaultdict
-
         all_images = cn_mri_scan_list + mci_mri_scan_list + ad_mri_scan_list
-        patient_images = defaultdict(list)
-        for img in all_images:
-            patient_images[img['patient_id']].append(img)
-
-        # Stratify patients by most severe diagnosis (AD > MCI > CN)
-        severity = {'CN': 0, 'MCI': 1, 'AD': 2}
-        cn_patients, mci_patients, ad_patients = [], [], []
-        for pid, images in patient_images.items():
-            max_label = max(images, key=lambda x: severity[x['label']])['label']
-            if max_label == 'CN':
-                cn_patients.append(pid)
-            elif max_label == 'MCI':
-                mci_patients.append(pid)
-            else:
-                ad_patients.append(pid)
-
-        print(f"\nTotal unique patients: {len(patient_images)}")
-        print(f"Patients per class - CN: {len(cn_patients)}, MCI: {len(mci_patients)}, AD: {len(ad_patients)}")
-
-        random.shuffle(cn_patients)
-        random.shuffle(mci_patients)
-        random.shuffle(ad_patients)
-
-        # Split patient IDs 70/10/20
-        no_of_patients = {
-            'train_cn': int(len(cn_patients) * 0.7),
-            'train_mci': int(len(mci_patients) * 0.7),
-            'train_ad': int(len(ad_patients) * 0.7),
-            'val_cn': int(len(cn_patients) * 0.10),
-            'val_mci': int(len(mci_patients) * 0.10),
-            'val_ad': int(len(ad_patients) * 0.10),
-        }
-
-        train_pids = set(
-            cn_patients[:no_of_patients['train_cn']] +
-            mci_patients[:no_of_patients['train_mci']] +
-            ad_patients[:no_of_patients['train_ad']]
-        )
-        val_pids = set(
-            cn_patients[no_of_patients['train_cn']:no_of_patients['train_cn'] + no_of_patients['val_cn']] +
-            mci_patients[no_of_patients['train_mci']:no_of_patients['train_mci'] + no_of_patients['val_mci']] +
-            ad_patients[no_of_patients['train_ad']:no_of_patients['train_ad'] + no_of_patients['val_ad']]
-        )
-        test_pids = set(
-            cn_patients[no_of_patients['train_cn'] + no_of_patients['val_cn']:] +
-            mci_patients[no_of_patients['train_mci'] + no_of_patients['val_mci']:] +
-            ad_patients[no_of_patients['train_ad'] + no_of_patients['val_ad']:]
-        )
-
-        # Collect all images belonging to each patient split
-        train_images, val_images, test_images = [], [], []
-        for pid in train_pids:
-            train_images.extend(patient_images[pid])
-        for pid in val_pids:
-            val_images.extend(patient_images[pid])
-        for pid in test_pids:
-            test_images.extend(patient_images[pid])
-
-        print(f"Patients split - Train: {len(train_pids)}, Val: {len(val_pids)}, Test: {len(test_pids)}")
-        print(f"Images split - Train: {len(train_images)}, Val: {len(val_images)}, Test: {len(test_images)}")
-
-        # Verify no patient overlap between splits
-        assert len(train_pids & val_pids) == 0, "Patient leakage between train and val!"
-        assert len(train_pids & test_pids) == 0, "Patient leakage between train and test!"
-        assert len(val_pids & test_pids) == 0, "Patient leakage between val and test!"
 
         # Create output directory
         save_path = os.path.join(OUTPUT_PATH, 'csv_splits')
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        # Create train/val/test DataFrames
-        train_img_df = pd.DataFrame(train_images)
-        train_img_df_path = os.path.join(save_path, 'train_mri_scan_list.csv')
-        train_img_df.to_csv(train_img_df_path, index=False)
+        all_img_df = pd.DataFrame(all_images)
+        all_img_df_path = os.path.join(save_path, 'all_mri_scan_list.csv')
+        all_img_df.to_csv(all_img_df_path, index=False)
 
-        val_img_df = pd.DataFrame(val_images)
-        val_img_df_path = os.path.join(save_path, 'val_mri_scan_list.csv')
-        val_img_df.to_csv(val_img_df_path, index=False)
-
-        test_img_df = pd.DataFrame(test_images)
-        test_img_df_path = os.path.join(save_path, 'test_mri_scan_list.csv')
-        test_img_df.to_csv(test_img_df_path, index=False)
-
-        return train_img_df_path, val_img_df_path, test_img_df_path
+        return all_img_df_path
 
 
 class ADNIAlzheimerDataset(Dataset):
@@ -288,8 +211,8 @@ class ADNIAlzheimerDataset(Dataset):
         return image, label
 
 
-def saveTensors(dataset, data_type, delete_original=False):
-    data_path = os.path.join(OUTPUT_PATH, '3D_tensors', data_type)
+def saveTensors(dataset, delete_original=False):
+    data_path = os.path.join(OUTPUT_PATH, '3D_tensors')
     if not os.path.exists(data_path):
         os.makedirs(data_path)
 
@@ -305,7 +228,7 @@ def saveTensors(dataset, data_type, delete_original=False):
         if not os.path.exists(label_path):
             os.makedirs(label_path)
 
-    print(f"Processing for {data_type} data is starting. Data will be saved at {data_path}")
+    print(f"Processing is starting. Data will be saved at {data_path}")
     print(f"Total number of images are: {len(dataset)}")
 
     start = time.time()
@@ -350,27 +273,19 @@ if __name__ == "__main__":
 
     # Create data paths
     dataPath = DataPaths()
-    train_img_df_path, val_img_df_path, test_img_df_path = dataPath.patient_id_loading()
+    all_img_df_path = dataPath.patient_id_loading()
 
     print("\n" + "="*60)
-    print("Creating datasets...")
+    print("Creating dataset...")
     print("="*60)
 
-    # Create datasets
-    train_dataset = ADNIAlzheimerDataset(train_img_df_path)
-    val_dataset = ADNIAlzheimerDataset(val_img_df_path)
-    test_dataset = ADNIAlzheimerDataset(test_img_df_path)
+    dataset = ADNIAlzheimerDataset(all_img_df_path)
 
     print("\n" + "="*60)
     print("Saving tensors...")
     print("="*60)
 
-    # Save tensors (delete_original=True to free disk space after processing)
-    saveTensors(test_dataset, 'Test', delete_original=True)
-    print("\n")
-    saveTensors(val_dataset, 'Val', delete_original=True)
-    print("\n")
-    saveTensors(train_dataset, 'Train', delete_original=True)
+    saveTensors(dataset, delete_original=True)
 
     print("\n" + "="*60)
     print("Processing complete!")

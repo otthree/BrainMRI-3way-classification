@@ -15,7 +15,7 @@ import glob
 import datetime
 from sklearn import neighbors
 from prettytable import PrettyTable
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score, roc_auc_score
 
 
 torch.cuda.empty_cache()
@@ -742,7 +742,41 @@ class Trainer:
         avg_loss = total_loss / len(testloader.dataset)
         return avg_loss, accuracy
 
-    
+    @torch.no_grad()
+    def evaluate_full(self, testloader):
+        """Evaluate and return loss, accuracy, F1 (macro), and AUROC (ovr)."""
+        self.model.eval()
+        total_loss = 0
+        all_labels = []
+        all_preds = []
+        all_probs = []
+
+        for batch in testloader:
+            batch = [t.to(self.device) for t in batch]
+            images, labels = batch
+            logits = self.model(images)[0]
+            loss = self.loss_fn(logits, nn.functional.one_hot(labels, num_classes=3).type(torch.FloatTensor).cuda())
+            total_loss += loss.item() * len(images)
+
+            probs = torch.softmax(logits, dim=1)
+            preds = torch.argmax(logits, dim=1)
+            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(preds.cpu().numpy())
+            all_probs.extend(probs.cpu().numpy())
+
+        import numpy as np
+        all_labels = np.array(all_labels)
+        all_preds = np.array(all_preds)
+        all_probs = np.array(all_probs)
+
+        avg_loss = total_loss / len(testloader.dataset)
+        accuracy = (all_preds == all_labels).sum() / len(all_labels)
+        f1 = f1_score(all_labels, all_preds, average='macro')
+        auroc = roc_auc_score(all_labels, all_probs, multi_class='ovr', average='macro')
+
+        return avg_loss, accuracy, f1, auroc
+
+
 # Get parameters for each layer of the model in a tabular format
 def count_parameters(model):
     table = PrettyTable(["Modules", "Parameters"])
@@ -818,9 +852,9 @@ loss_fn = nn.CrossEntropyLoss()
 
 trainer = Trainer(model, optimizer, loss_fn, config['model_name'], device=device)
 trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
-wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc})
+test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
+print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
+wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc, "Test F1": test_f1, "Test AUROC": test_auroc})
 
 
 # In[19]:
@@ -854,8 +888,8 @@ plt.show()
 
 
 trainer = Trainer(model, optimizer, loss_fn, config['model_name'], device=device)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
+test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
+print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
 
 
 # In[25]:
@@ -864,10 +898,10 @@ print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
 # Load the model
 best_model = ViTForClassfication(config)
 best_model.load_state_dict(torch.load(f"/home/admin1/Arindam/Alzheimer/ViT/experiments/{config['model_name']}/model_best_finetuned.pt"))
-   
+
 trainer = Trainer(best_model, optimizer, loss_fn, config['model_name'], device=device)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
+test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
+print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
 
 
 # In[ ]:
