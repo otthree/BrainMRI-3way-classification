@@ -650,7 +650,10 @@ class Trainer:
         # Keep track of the losses and accuracies
         train_losses, val_losses, train_acces, val_acces, train_logs = [], [], [], [], []
         # Keep track of best model
-        best_train_loss, best_val_loss = 1.0, 1.0
+        best_val_loss = float('inf')
+        # Early stopping
+        patience = 5
+        patience_counter = 0
         # Train the model
         start_time = time.time()
         for i in range(epochs):
@@ -664,12 +667,20 @@ class Trainer:
             text = f"Epoch: {i+1}, Train loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Time: {total_time/60:.1f}min ({total_time/(60*(i+1)):.1f} min/epoch)"
             print(text)
             train_logs.append(text)
-            if train_loss < best_train_loss and val_loss < best_val_loss:
-                best_train_loss, best_val_loss = train_loss, val_loss
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience_counter = 0
                 text = f"\tSave best checkpoint at epoch {i+1}"
                 print(text)
                 save_checkpoint(self.exp_name, self.model, f'best_{config["model_name"]}')
                 train_logs.append(text)
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    text = f"\tEarly stopping at epoch {i+1} (no improvement for {patience} epochs)"
+                    print(text)
+                    train_logs.append(text)
+                    break
             if save_model_every_n_epochs > 0 and (i+1) % save_model_every_n_epochs == 0 and i+1 != epochs:
                 print('\tSave checkpoint at epoch', i+1)
                 save_checkpoint(self.exp_name, self.model, i+1)
@@ -754,9 +765,6 @@ train_loader, valid_loader, test_loader, class_dist = prepare_data()
 
 print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
 
-assert len(train_loader.dataset)==3139
-assert len(valid_loader.dataset)==671
-assert len(test_loader.dataset)==677
 
 print(f"\t\tCN\tMCI\tAD")
 for key in class_dist.keys():

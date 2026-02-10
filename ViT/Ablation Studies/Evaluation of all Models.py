@@ -506,9 +506,6 @@ train_loader, valid_loader, test_loader, class_dist = prepare_data()
 
 print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
 
-assert len(train_loader.dataset)==1526
-assert len(valid_loader.dataset)==326
-assert len(test_loader.dataset)==330
 
 print(f"\t\tCN\tMCI\tAD")
 for key in class_dist.keys():

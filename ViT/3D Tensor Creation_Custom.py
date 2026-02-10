@@ -157,14 +157,14 @@ class DataPaths():
         random.shuffle(mci_patients)
         random.shuffle(ad_patients)
 
-        # Split patient IDs 70/15/15
+        # Split patient IDs 70/10/20
         no_of_patients = {
             'train_cn': int(len(cn_patients) * 0.7),
             'train_mci': int(len(mci_patients) * 0.7),
             'train_ad': int(len(ad_patients) * 0.7),
-            'val_cn': int(len(cn_patients) * 0.15),
-            'val_mci': int(len(mci_patients) * 0.15),
-            'val_ad': int(len(ad_patients) * 0.15),
+            'val_cn': int(len(cn_patients) * 0.10),
+            'val_mci': int(len(mci_patients) * 0.10),
+            'val_ad': int(len(ad_patients) * 0.10),
         }
 
         train_pids = set(
