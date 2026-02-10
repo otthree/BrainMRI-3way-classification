@@ -13,6 +13,7 @@ import glob
 from scipy.ndimage import zoom
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
+from tqdm import tqdm
 
 import gc
 gc.collect()
@@ -235,7 +236,7 @@ def saveTensors(dataset, delete_original=False):
     skipped = 0
     deleted = 0
 
-    for idx in range(len(dataset)):
+    for idx in tqdm(range(len(dataset)), desc="Saving tensors", unit="img"):
         tensor, label = dataset.__getitem__(idx)
 
         # Skip if file was not found
@@ -252,9 +253,6 @@ def saveTensors(dataset, delete_original=False):
             if os.path.exists(original_path):
                 os.remove(original_path)
                 deleted += 1
-
-        if (idx + 1) % 100 == 0:
-            print(f"{idx + 1} images done.")
 
     req_time = time.time() - start
     print(f"Total time required for processing the data is {req_time // 60} minutes {req_time % 60} sec.")

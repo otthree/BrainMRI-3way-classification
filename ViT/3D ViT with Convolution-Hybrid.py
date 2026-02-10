@@ -4,6 +4,7 @@
 # In[1]:
 
 
+import argparse
 import torch
 import torch.nn as nn
 from torch import optim
@@ -16,6 +17,7 @@ import datetime
 from sklearn import neighbors
 from prettytable import PrettyTable
 from sklearn.metrics import confusion_matrix, f1_score, roc_auc_score
+from fold_split import get_fold, FoldDataset
 
 
 torch.cuda.empty_cache()
@@ -448,73 +450,25 @@ wandb.init(
 # In[5]:
 
 
-#@title Prepare Data 📊
-# Import libraries
-import torch
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
-import torchio as tio
+#@title Prepare Data
+from torch.utils.data import DataLoader
 
-class FolderDataset(Dataset):
-    def __init__(self, folder):
-        self.folder = folder
-        self.image_paths = glob.glob(f'{self.folder}/*/*.pt')
-        self.labels = {
-            'CN' : 0,
-            'MCI' : 1,
-            'AD' : 2
-        }
-        self.transform = False #tio.transforms.Compose(
-            #[tio.transforms.RandomAffine(degrees=5)
-            #tio.transforms.RandomBiasField()])
-        
-    def __len__(self):
-        return len(self.image_paths)
-    
-    def __label_dist__(self):
-        cn,mci, ad = 0, 0, 0
-        for path in self.image_paths:
-            if self.__label_extract__(path) == 0:
-                cn += 1
-            elif self.__label_extract__(path) == 1:
-                mci += 1
-            elif self.__label_extract__(path) == 2:
-                ad += 1
-        
-        return {'CN': cn, 'MCI': mci, 'AD': ad}
-    
-    def __label_extract__(self, path):
-        if 'CN' in path:
-            return 0
-        elif 'MCI' in path:
-            return 1
-        elif 'AD' in path:
-            return 2
-        
-    def __getitem__(self, idx):
-        tensor, label = torch.load(self.image_paths[idx]), self.__label_extract__(self.image_paths[idx])
-        if self.transform:
-            tensor = self.transform(tensor)
-        
-        return tensor, label
-    
-def prepare_data(batch_size=4, num_workers=2, train_sample_size=None, test_sample_size=None):
-    train_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Train')
-    val_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Val')
-    test_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Test')
+def prepare_data(fold_num):
+    train_files, val_files, test_files = get_fold(fold_num)
+    train_dataset = FoldDataset(train_files)
+    val_dataset = FoldDataset(val_files)
+    test_dataset = FoldDataset(test_files)
 
     train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
     valid_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False)
 
-    classes = ('CN', 'MCI', 'AD')
     class_dist = {
-        'Train': train_dataset.__label_dist__(),
-        'Val': val_dataset.__label_dist__(),
-        'Test': test_dataset.__label_dist__()
+        'Train': train_dataset.label_dist(),
+        'Val': val_dataset.label_dist(),
+        'Test': test_dataset.label_dist()
     }
-    
+
     return train_loader, valid_loader, test_loader, class_dist
 
 
@@ -617,15 +571,6 @@ def visualize_images(dataset):
         ax = fig.add_subplot(4, 3, 3*i+3, xticks=[], yticks=[])
         ax.imshow(np.rot90(img_3), cmap='gray')
         ax.set_title(f"{classes[labels[i]]} (axial)")
-
-
-# In[7]:
-
-
-import matplotlib
-matplotlib.use('Agg')
-train_dataset = FolderDataset(folder='/workspace/BrainMRI-3way-classification/data/3D_tensors/Train')
-visualize_images(train_dataset)
 
 
 # In[8]:
@@ -795,102 +740,74 @@ def count_parameters(model):
 # In[9]:
 
 
-train_loader, valid_loader, test_loader, class_dist = prepare_data()
+def run_fold(fold_num):
+    print(f"\n{'='*60}")
+    print(f"  Fold {fold_num}")
+    print(f"{'='*60}")
 
-print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
+    train_loader, valid_loader, test_loader, class_dist = prepare_data(fold_num)
 
+    print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
+    print(f"\t\tCN\tMCI\tAD")
+    for key in class_dist.keys():
+        print(f"{key}\t: \t{class_dist[key]['CN']}\t{class_dist[key]['MCI']}\t{class_dist[key]['AD']}")
 
-print(f"\t\tCN\tMCI\tAD")
-for key in class_dist.keys():
-    print(f"{key}\t: \t{class_dist[key]['CN']}\t{class_dist[key]['MCI']}\t{class_dist[key]['AD']}")
-# Check a sample batch size
-idx =0
-for data in train_loader:
-    images, labels = data
-    print(f"\nShape of images and labels of a signle batch is {images.shape} and {labels.shape} respectively.")
-    break
+    for data in train_loader:
+        images, labels = data
+        print(f"\nShape of images and labels of a single batch is {images.shape} and {labels.shape} respectively.")
+        break
 
+    model = ViTForClassfication(config)
+    count_parameters(model)
+    total_params = sum(p.numel() for p in model.parameters())
+    total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
 
-# In[10]:
+    save_model_every_n_epochs = config['save_model_every']
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
+    loss_fn = nn.CrossEntropyLoss()
 
+    fold_exp_name = f"{config['exp_name']}_fold{fold_num}"
+    trainer = Trainer(model, optimizer, loss_fn, fold_exp_name, device=device)
+    trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
+    test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
+    print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
+    wandb.log({f"fold{fold_num}_test_loss": test_loss, f"fold{fold_num}_test_acc": test_acc,
+               f"fold{fold_num}_test_f1": test_f1, f"fold{fold_num}_test_auroc": test_auroc})
 
-# Load the dataset
-# Create the model, optimizer, loss function and trainer
-model = ViTForClassfication(config)
-print(model)
-count_parameters(model)
-# Get number of parameters in the model
-total_params = sum(p.numel() for p in model.parameters())
-total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
-
-
-# In[11]:
-
-
-# Training parameters
-save_model_every_n_epochs = config['save_model_every']
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
-loss_fn = nn.CrossEntropyLoss()
-
-
-# In[13]:
+    return {'loss': test_loss, 'acc': test_acc, 'f1': test_f1, 'auroc': test_auroc}
 
 
-trainer = Trainer(model, optimizer, loss_fn, config['exp_name'], device=device)
-trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
-test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
-print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
-wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc, "Test F1": test_f1, "Test AUROC": test_auroc})
+if __name__ == '__main__':
+    import numpy as np
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fold', type=str, default='0', help='Fold number (0-4) or "all"')
+    args = parser.parse_args()
 
+    if args.fold == 'all':
+        folds = list(range(5))
+    else:
+        folds = [int(args.fold)]
 
-# In[12]:
+    results = []
+    for f in folds:
+        res = run_fold(f)
+        results.append(res)
 
-
-#@title Plot training Results
-config, model, train_losses, val_losses, train_acces,val_acces = load_experiment(config['exp_name'])
-
-#import matplotlib.pyplot as plt
-# Create two subplots of train/test losses and accuracies
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 8))
-ax1.plot(train_losses, label="Train loss")
-ax1.plot(val_losses, label="Val loss")
-ax1.set_xlabel("Epoch")
-ax1.set_ylabel("Loss")
-ax1.legend()
-ax1.set_title("(a) Training loss and validation loss vs epochs", fontsize='10')
-
-ax2.plot(train_acces, label="Train Accuracy")
-ax2.plot(val_acces, label="Val Accuracy")
-ax2.set_xlabel("Epoch")
-ax2.set_ylabel("Accuracy")
-ax2.legend()
-ax2.set_title("(b) Training accuracy and validation accuracy vs epochs", fontsize='10')
-plt.subplots_adjust(hspace=0.3)
-plt.savefig(f"experiments/{config['exp_name']}/metrics_{config['model_name']}.png", dpi=600, bbox_inches='tight')
-plt.show()
-
-
-# In[13]:
-
-
-trainer = Trainer(model, optimizer, loss_fn, config['exp_name'], device=device)
-test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
-print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
-
-
-# In[14]:
-
-
-# Load the model
-final_model = ViTForClassfication(config)
-final_model.load_state_dict(torch.load(f"experiments/3D ViT Final/model_best_{config['model_name']}.pt"))
-
-trainer = Trainer(final_model, optimizer, loss_fn, config['exp_name'], device=device)
-test_loss, test_acc, test_f1, test_auroc = trainer.evaluate_full(test_loader)
-print(f"\n\nTest Loss: {test_loss}, Test Accuracy: {test_acc}, F1: {test_f1}, AUROC: {test_auroc}")
+    if len(results) > 1:
+        print(f"\n{'='*60}")
+        print("  5-Fold CV Summary")
+        print(f"{'='*60}")
+        for i, res in enumerate(results):
+            print(f"  Fold {i}: Acc={res['acc']:.4f}  F1={res['f1']:.4f}  AUROC={res['auroc']:.4f}")
+        accs = np.array([r['acc'] for r in results])
+        f1s = np.array([r['f1'] for r in results])
+        aurocs = np.array([r['auroc'] for r in results])
+        print(f"\n  Mean Acc:   {accs.mean():.4f} +/- {accs.std():.4f}")
+        print(f"  Mean F1:    {f1s.mean():.4f} +/- {f1s.std():.4f}")
+        print(f"  Mean AUROC: {aurocs.mean():.4f} +/- {aurocs.std():.4f}")
 
 
 # In[ ]:

@@ -4,6 +4,8 @@
 # In[1]:
 
 
+import sys
+import argparse
 import torch
 import torch.nn as nn
 from torch import optim
@@ -16,6 +18,9 @@ import datetime
 from sklearn import neighbors
 from prettytable import PrettyTable
 from sklearn.metrics import confusion_matrix
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from fold_split import get_fold, FoldDataset
 
 torch.cuda.empty_cache()
 torch.manual_seed(0)
@@ -405,73 +410,25 @@ class ViTForClassfication(nn.Module):
 # In[3]:
 
 
-#@title Prepare Data 📊
-# Import libraries
-import torch
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
-import torchio as tio
+#@title Prepare Data
+from torch.utils.data import DataLoader
 
-class FolderDataset(Dataset):
-    def __init__(self, folder):
-        self.folder = folder
-        self.image_paths = glob.glob(f'{self.folder}/*/*.pt')
-        self.labels = {
-            'CN' : 0,
-            'MCI' : 1,
-            'AD' : 2
-        }
-        self.transform = False #tio.transforms.Compose(
-            #[tio.transforms.RandomAffine(degrees=5)
-            #tio.transforms.RandomBiasField()])
-        
-    def __len__(self):
-        return len(self.image_paths)
-    
-    def __label_dist__(self):
-        cn,mci, ad = 0, 0, 0
-        for path in self.image_paths:
-            if self.__label_extract__(path) == 0:
-                cn += 1
-            elif self.__label_extract__(path) == 1:
-                mci += 1
-            elif self.__label_extract__(path) == 2:
-                ad += 1
-        
-        return {'CN': cn, 'MCI': mci, 'AD': ad}
-    
-    def __label_extract__(self, path):
-        if 'CN' in path:
-            return 0
-        elif 'MCI' in path:
-            return 1
-        elif 'AD' in path:
-            return 2
-        
-    def __getitem__(self, idx):
-        tensor, label = torch.load(self.image_paths[idx]), self.__label_extract__(self.image_paths[idx])
-        if self.transform:
-            tensor = self.transform(tensor)
-        
-        return tensor, label
-    
-def prepare_data(batch_size=4, num_workers=2, train_sample_size=None, test_sample_size=None):
-    train_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Train')
-    val_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Val')
-    test_dataset = FolderDataset(folder='/home/admin1/Arindam/Alzheimer/ViT/data/3D (part II)/Test')
+def prepare_data(fold_num):
+    train_files, val_files, test_files = get_fold(fold_num)
+    train_dataset = FoldDataset(train_files)
+    val_dataset = FoldDataset(val_files)
+    test_dataset = FoldDataset(test_files)
 
     train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
     valid_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False)
 
-    classes = ('CN', 'MCI', 'AD')
     class_dist = {
-        'Train': train_dataset.__label_dist__(),
-        'Val': val_dataset.__label_dist__(),
-        'Test': test_dataset.__label_dist__()
+        'Train': train_dataset.label_dist(),
+        'Val': val_dataset.label_dist(),
+        'Test': test_dataset.label_dist()
     }
-    
+
     return train_loader, valid_loader, test_loader, class_dist
 
 
@@ -736,174 +693,88 @@ def count_parameters(model):
 # In[7]:
 
 
-train_loader, valid_loader, test_loader, class_dist = prepare_data()
-
-print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
-
-
-print(f"\t\tCN\tMCI\tAD")
-for key in class_dist.keys():
-    print(f"{key}\t: \t{class_dist[key]['CN']}\t{class_dist[key]['MCI']}\t{class_dist[key]['AD']}")
-# Check a sample batch size
-idx =0
-for data in train_loader:
-    images, labels = data
-    print(f"\nShape of images and labels of a signle batch is {images.shape} and {labels.shape} respectively.")
-    break
+ABLATION_CONFIGS = [
+    {'num_hidden_layers': 4, 'model_name': 'Hybrid-Ablation-TEL4'},
+    {'num_hidden_layers': 5, 'model_name': 'Hybrid-Ablation-TEL5'},
+    {'num_hidden_layers': 6, 'model_name': 'Hybrid-Ablation-TEL6'},
+]
 
 
-# ## **Hybrid-ViT (Transformer Encoder Layer No - 4)**
+def run_fold(fold_num):
+    print(f"\n{'='*60}")
+    print(f"  Fold {fold_num}")
+    print(f"{'='*60}")
 
-# In[8]:
+    train_loader, valid_loader, test_loader, class_dist = prepare_data(fold_num)
 
+    print(f"Total number of images in train, val and test set are, {len(train_loader.dataset)}, {len(valid_loader.dataset)}, {len(test_loader.dataset)}")
+    print(f"\t\tCN\tMCI\tAD")
+    for key in class_dist.keys():
+        print(f"{key}\t: \t{class_dist[key]['CN']}\t{class_dist[key]['MCI']}\t{class_dist[key]['AD']}")
 
-# Load the dataset
-# Create the model, optimizer, loss function and trainer
-model = ViTForClassfication(config)
-print(model)
-# Load weights
-model.load_state_dict(torch.load(f"{config['weight_base_dir']}{config['model_name']}/model_best_{config['model_name']}.pt"))
-# Freeze Transformer layer
-model.encoder.requires_grad_(False)
+    for data in train_loader:
+        images, labels = data
+        print(f"\nShape of images and labels of a single batch is {images.shape} and {labels.shape} respectively.")
+        break
 
-count_parameters(model)
-# Get number of parameters in the model
-total_params = sum(p.numel() for p in model.parameters())
-total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
+    fold_results = {}
+    for ablation in ABLATION_CONFIGS:
+        config['num_hidden_layers'] = ablation['num_hidden_layers']
+        config['model_name'] = ablation['model_name']
 
+        print(f"\n--- {config['model_name']} (layers={config['num_hidden_layers']}) Fine-Tune ---")
+        torch.cuda.empty_cache()
+        torch.manual_seed(0)
 
-# In[9]:
+        model = ViTForClassfication(config)
+        # Load weights
+        model.load_state_dict(torch.load(f"{config['weight_base_dir']}{config['model_name']}/model_best_{config['model_name']}.pt"))
+        # Freeze Transformer layer
+        model.encoder.requires_grad_(False)
 
+        count_parameters(model)
+        total_params = sum(p.numel() for p in model.parameters())
+        total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
 
-# Training parameters
-save_model_every_n_epochs = config['save_model_every']
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
-loss_fn = nn.CrossEntropyLoss()
+        save_model_every_n_epochs = config['save_model_every']
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
+        loss_fn = nn.CrossEntropyLoss()
 
+        fold_exp_name = f"{config['model_name']}_fold{fold_num}"
+        trainer = Trainer(model, optimizer, loss_fn, fold_exp_name, device=device)
+        trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
+        test_loss, test_acc = trainer.evaluate(test_loader)
+        print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
+        fold_results[config['model_name']] = {'loss': test_loss, 'acc': test_acc}
 
-# In[10]:
-
-
-trainer = Trainer(model, optimizer, loss_fn, config['model_name'], device=device)
-trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
-#wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc})
-
-
-# In[11]:
-
-
-get_ipython().system('nvidia-smi')
-
-
-# ## **Hybrid-ViT (Transformer Encoder Layer No - 5)**
-
-# In[12]:
-
-
-torch.cuda.empty_cache()
-torch.manual_seed(0)
-get_ipython().system('nvidia-smi')
+    return fold_results
 
 
-# In[13]:
+if __name__ == '__main__':
+    import numpy as np
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fold', type=str, default='0', help='Fold number (0-4) or "all"')
+    args = parser.parse_args()
 
+    if args.fold == 'all':
+        folds = list(range(5))
+    else:
+        folds = [int(args.fold)]
 
-# Set Layer No = 5
-config["num_hidden_layers"] = 5
-config['model_name'] = 'Hybrid-Ablation-TEL5'
+    all_results = []
+    for f in folds:
+        res = run_fold(f)
+        all_results.append(res)
 
-# Create the model, optimizer, loss function and trainer
-model = ViTForClassfication(config)
-print(model)
-
-# Load weights
-model.load_state_dict(torch.load(f"{config['weight_base_dir']}{config['model_name']}/model_best_{config['model_name']}.pt"))
-# Freeze Transformer layer
-model.encoder.requires_grad_(False)
-
-count_parameters(model)
-# Get number of parameters in the model
-total_params = sum(p.numel() for p in model.parameters())
-total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
-
-
-# In[14]:
-
-
-# Training parameters
-save_model_every_n_epochs = config['save_model_every']
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
-loss_fn = nn.CrossEntropyLoss()
-
-
-# In[15]:
-
-
-trainer = Trainer(model, optimizer, loss_fn, config['model_name'], device=device)
-trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
-#wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc})
-
-
-# ## **Hybrid-ViT (Transformer Encoder Layer No - 6)**
-
-# In[16]:
-
-
-torch.cuda.empty_cache()
-torch.manual_seed(0)
-get_ipython().system('nvidia-smi')
-
-
-# In[17]:
-
-
-# Set Layer No = 6
-config["num_hidden_layers"] = 6
-config['model_name'] = 'Hybrid-Ablation-TEL6'
-
-# Create the model, optimizer, loss function and trainer
-model = ViTForClassfication(config)
-print(model)
-
-# Load weights
-model.load_state_dict(torch.load(f"{config['weight_base_dir']}{config['model_name']}/model_best_{config['model_name']}.pt"))
-# Freeze Transformer layer
-model.encoder.requires_grad_(False)
-
-count_parameters(model)
-# Get number of parameters in the model
-total_params = sum(p.numel() for p in model.parameters())
-total_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {total_params}, Trainable Parameters {total_trainable_params}\nTotal parameters: {total_params/1000000}M, Trainable Parameters {total_trainable_params/1000000}M")
-
-
-# In[18]:
-
-
-# Training parameters
-save_model_every_n_epochs = config['save_model_every']
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
-loss_fn = nn.CrossEntropyLoss()
-
-
-# In[19]:
-
-
-trainer = Trainer(model, optimizer, loss_fn, config['model_name'], device=device)
-trainer.train(train_loader, valid_loader, config['epochs'], scheduler, save_model_every_n_epochs=save_model_every_n_epochs)
-test_loss, test_acc = trainer.evaluate(test_loader)
-print(f"\n\nTest Loss: {test_loss} and Test Accuracy: {test_acc}")
-#wandb.log({"Test Loss": test_loss, "Test Accuracy": test_acc})
+    if len(all_results) > 1:
+        print(f"\n{'='*60}")
+        print("  5-Fold CV Summary")
+        print(f"{'='*60}")
+        for model_name in ABLATION_CONFIGS:
+            mn = model_name['model_name']
+            accs = np.array([r[mn]['acc'] for r in all_results])
+            print(f"  {mn}: Mean Acc = {accs.mean():.4f} +/- {accs.std():.4f}")
 

@@ -92,8 +92,27 @@ pip install -r requirements.txt
 - Preprocess the data using provided scripts - `ViT/3D Tensor Creation.py`. Before that, update the file paths.
 
 #### Training:
-- Update the data path in the script - `ViT/3D ViT with Convolution-Hybrid.py`.
-- Run the script.
+
+All training scripts support patient-wise stratified 5-fold cross-validation via `--fold`.
+
+**Single fold:**
+```
+python "ViT/3D ViT with Convolution-Hybrid.py" --fold 0
+```
+
+**Full 5-fold CV (prints per-fold results + mean/std):**
+```
+python "ViT/3D ViT with Convolution-Hybrid.py" --fold all
+```
+
+`--fold` accepts `0`, `1`, `2`, `3`, `4`, or `all`. The same argument works for all scripts:
+- `ViT/3D ViT with Convolution-Hybrid.py`
+- `ViT/3D ViT with Convolution-CCT.py`
+- `ViT/3D ViT with Convolution-Hybrid-FineTune.py`
+- `ViT/Ablation Studies/3D Hybrid-ViT Ablation Studies.py`
+- `ViT/Ablation Studies/3D Hybrid-ViT Ablation Studies-FineTune.py`
+
+Before running, update `TENSOR_PATH` and `CSV_PATH` in `ViT/fold_split.py` to match your data location.
 
 #### Visualization:
 - For Visualization visit the `visualization` branch of this repository.
