@@ -130,31 +130,75 @@ class DataPaths():
         print(f"\nClass distribution:")
         print(f"  CN: {len(cn_mri_scan_list)}, MCI: {len(mci_mri_scan_list)}, AD: {len(ad_mri_scan_list)}")
 
-        # Shuffle
-        random.shuffle(cn_mri_scan_list)
-        random.shuffle(mci_mri_scan_list)
-        random.shuffle(ad_mri_scan_list)
+        # --- Patient-wise split to prevent data leakage ---
+        from collections import defaultdict
 
-        # Split: 70% train, 15% val, 15% test
-        no_of_images = {
-            'train_cn': int(len(cn_mri_scan_list) * 0.7),
-            'train_mci': int(len(mci_mri_scan_list) * 0.7),
-            'train_ad': int(len(ad_mri_scan_list) * 0.7),
-            'val_cn': int(len(cn_mri_scan_list) * 0.15),
-            'val_mci': int(len(mci_mri_scan_list) * 0.15),
-            'val_ad': int(len(ad_mri_scan_list) * 0.15),
-            'test_cn': len(cn_mri_scan_list) - int(len(cn_mri_scan_list) * 0.7) - int(len(cn_mri_scan_list) * 0.15),
-            'test_mci': len(mci_mri_scan_list) - int(len(mci_mri_scan_list) * 0.7) - int(len(mci_mri_scan_list) * 0.15),
-            'test_ad': len(ad_mri_scan_list) - int(len(ad_mri_scan_list) * 0.7) - int(len(ad_mri_scan_list) * 0.15)
+        all_images = cn_mri_scan_list + mci_mri_scan_list + ad_mri_scan_list
+        patient_images = defaultdict(list)
+        for img in all_images:
+            patient_images[img['patient_id']].append(img)
+
+        # Stratify patients by most severe diagnosis (AD > MCI > CN)
+        severity = {'CN': 0, 'MCI': 1, 'AD': 2}
+        cn_patients, mci_patients, ad_patients = [], [], []
+        for pid, images in patient_images.items():
+            max_label = max(images, key=lambda x: severity[x['label']])['label']
+            if max_label == 'CN':
+                cn_patients.append(pid)
+            elif max_label == 'MCI':
+                mci_patients.append(pid)
+            else:
+                ad_patients.append(pid)
+
+        print(f"\nTotal unique patients: {len(patient_images)}")
+        print(f"Patients per class - CN: {len(cn_patients)}, MCI: {len(mci_patients)}, AD: {len(ad_patients)}")
+
+        random.shuffle(cn_patients)
+        random.shuffle(mci_patients)
+        random.shuffle(ad_patients)
+
+        # Split patient IDs 70/15/15
+        no_of_patients = {
+            'train_cn': int(len(cn_patients) * 0.7),
+            'train_mci': int(len(mci_patients) * 0.7),
+            'train_ad': int(len(ad_patients) * 0.7),
+            'val_cn': int(len(cn_patients) * 0.15),
+            'val_mci': int(len(mci_patients) * 0.15),
+            'val_ad': int(len(ad_patients) * 0.15),
         }
 
-        print(no_of_images)
+        train_pids = set(
+            cn_patients[:no_of_patients['train_cn']] +
+            mci_patients[:no_of_patients['train_mci']] +
+            ad_patients[:no_of_patients['train_ad']]
+        )
+        val_pids = set(
+            cn_patients[no_of_patients['train_cn']:no_of_patients['train_cn'] + no_of_patients['val_cn']] +
+            mci_patients[no_of_patients['train_mci']:no_of_patients['train_mci'] + no_of_patients['val_mci']] +
+            ad_patients[no_of_patients['train_ad']:no_of_patients['train_ad'] + no_of_patients['val_ad']]
+        )
+        test_pids = set(
+            cn_patients[no_of_patients['train_cn'] + no_of_patients['val_cn']:] +
+            mci_patients[no_of_patients['train_mci'] + no_of_patients['val_mci']:] +
+            ad_patients[no_of_patients['train_ad'] + no_of_patients['val_ad']:]
+        )
 
-        len_train = no_of_images['train_cn'] + no_of_images['train_mci'] + no_of_images['train_ad']
-        len_val = no_of_images['val_cn'] + no_of_images['val_mci'] + no_of_images['val_ad']
-        len_test = no_of_images['test_cn'] + no_of_images['test_mci'] + no_of_images['test_ad']
+        # Collect all images belonging to each patient split
+        train_images, val_images, test_images = [], [], []
+        for pid in train_pids:
+            train_images.extend(patient_images[pid])
+        for pid in val_pids:
+            val_images.extend(patient_images[pid])
+        for pid in test_pids:
+            test_images.extend(patient_images[pid])
 
-        print(f"Total number of train, validation and test images are {len_train}, {len_val} and {len_test} respectively.")
+        print(f"Patients split - Train: {len(train_pids)}, Val: {len(val_pids)}, Test: {len(test_pids)}")
+        print(f"Images split - Train: {len(train_images)}, Val: {len(val_images)}, Test: {len(test_images)}")
+
+        # Verify no patient overlap between splits
+        assert len(train_pids & val_pids) == 0, "Patient leakage between train and val!"
+        assert len(train_pids & test_pids) == 0, "Patient leakage between train and test!"
+        assert len(val_pids & test_pids) == 0, "Patient leakage between val and test!"
 
         # Create output directory
         save_path = os.path.join(OUTPUT_PATH, 'csv_splits')
@@ -162,27 +206,15 @@ class DataPaths():
             os.makedirs(save_path)
 
         # Create train/val/test DataFrames
-        train_img_df = pd.DataFrame(
-            cn_mri_scan_list[:no_of_images['train_cn']] +
-            mci_mri_scan_list[:no_of_images['train_mci']] +
-            ad_mri_scan_list[:no_of_images['train_ad']]
-        )
+        train_img_df = pd.DataFrame(train_images)
         train_img_df_path = os.path.join(save_path, 'train_mri_scan_list.csv')
         train_img_df.to_csv(train_img_df_path, index=False)
 
-        val_img_df = pd.DataFrame(
-            cn_mri_scan_list[no_of_images['train_cn']:no_of_images['train_cn'] + no_of_images['val_cn']] +
-            mci_mri_scan_list[no_of_images['train_mci']:no_of_images['train_mci'] + no_of_images['val_mci']] +
-            ad_mri_scan_list[no_of_images['train_ad']:no_of_images['train_ad'] + no_of_images['val_ad']]
-        )
+        val_img_df = pd.DataFrame(val_images)
         val_img_df_path = os.path.join(save_path, 'val_mri_scan_list.csv')
         val_img_df.to_csv(val_img_df_path, index=False)
 
-        test_img_df = pd.DataFrame(
-            cn_mri_scan_list[no_of_images['train_cn'] + no_of_images['val_cn']:] +
-            mci_mri_scan_list[no_of_images['train_mci'] + no_of_images['val_mci']:] +
-            ad_mri_scan_list[no_of_images['train_ad'] + no_of_images['val_ad']:]
-        )
+        test_img_df = pd.DataFrame(test_images)
         test_img_df_path = os.path.join(save_path, 'test_mri_scan_list.csv')
         test_img_df.to_csv(test_img_df_path, index=False)
 
