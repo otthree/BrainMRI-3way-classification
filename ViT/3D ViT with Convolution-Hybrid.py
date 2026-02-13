@@ -384,7 +384,7 @@ class ViTForClassfication(nn.Module):
             return (logits, all_attentions)
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv3d)):
             torch.nn.init.normal_(module.weight, mean=0.0, std=self.config["initializer_range"])
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -416,8 +416,8 @@ config = {
     "num_hidden_layers": 3,
     "num_attention_heads": 8,
     "intermediate_size": 3 * 216, # 3 * hidden_size
-    "hidden_dropout_prob": 0.25,
-    "attention_probs_dropout_prob": 0.25,
+    "hidden_dropout_prob": 0.1,
+    "attention_probs_dropout_prob": 0.1,
     "initializer_range": 0.02,
     "num_classes": 3, # num_classes
     "num_channels": 1,
@@ -455,7 +455,7 @@ from torch.utils.data import DataLoader
 
 def prepare_data(fold_num):
     train_files, val_files, test_files = get_fold(fold_num)
-    train_dataset = FoldDataset(train_files)
+    train_dataset = FoldDataset(train_files, augment=True)
     val_dataset = FoldDataset(val_files)
     test_dataset = FoldDataset(test_files)
 
@@ -597,7 +597,7 @@ class Trainer:
         # Keep track of best model
         best_val_loss = float('inf')
         # Early stopping
-        patience = 5
+        patience = 15
         patience_counter = 0
         # Train the model
         start_time = time.time()
@@ -649,7 +649,7 @@ class Trainer:
             self.optimizer.zero_grad()
             # Calculate the loss
             logits = self.model(images)[0]
-            loss = self.loss_fn(logits, nn.functional.one_hot(labels, num_classes=3).type(torch.FloatTensor).cuda())
+            loss = self.loss_fn(logits, labels)
             # Backpropagate the loss
             loss.backward()
             # Update the model's parameters
@@ -678,7 +678,7 @@ class Trainer:
                 logits = self.model(images)[0]
 
                 # Calculate the loss
-                loss = self.loss_fn(logits, nn.functional.one_hot(labels, num_classes=3).type(torch.FloatTensor).cuda())
+                loss = self.loss_fn(logits, labels)
                 total_loss += loss.item() * len(images)
 
                 # Calculate the accuracy
@@ -702,7 +702,7 @@ class Trainer:
             batch = [t.to(self.device) for t in batch]
             images, labels = batch
             logits = self.model(images)[0]
-            loss = self.loss_fn(logits, nn.functional.one_hot(labels, num_classes=3).type(torch.FloatTensor).cuda())
+            loss = self.loss_fn(logits, labels)
             total_loss += loss.item() * len(images)
 
             probs = torch.softmax(logits, dim=1)
@@ -766,8 +766,12 @@ def run_fold(fold_num):
     save_model_every_n_epochs = config['save_model_every']
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-3)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30, 40, 50], gamma=0.7)
-    loss_fn = nn.CrossEntropyLoss()
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=1e-6)
+    # Class-weighted CrossEntropyLoss
+    n_samples = [class_dist['Train']['CN'], class_dist['Train']['MCI'], class_dist['Train']['AD']]
+    total = sum(n_samples)
+    class_weights = torch.tensor([total / (3 * n) for n in n_samples], dtype=torch.float32).to(device)
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
 
     fold_exp_name = f"{config['exp_name']}_fold{fold_num}"
     trainer = Trainer(model, optimizer, loss_fn, fold_exp_name, device=device)

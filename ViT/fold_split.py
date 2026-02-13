@@ -87,8 +87,9 @@ def get_fold(fold_num, val_ratio=0.2):
 class FoldDataset(Dataset):
     """Dataset that loads pre-saved .pt tensors from a file list."""
 
-    def __init__(self, file_list):
+    def __init__(self, file_list, augment=False):
         self.file_list = file_list
+        self.augment = augment
 
     def __len__(self):
         return len(self.file_list)
@@ -96,7 +97,23 @@ class FoldDataset(Dataset):
     def __getitem__(self, idx):
         path, label = self.file_list[idx]
         tensor = torch.load(path, weights_only=True)
+        if self.augment:
+            tensor = self._apply_augmentation(tensor)
         return tensor, label
+
+    def _apply_augmentation(self, tensor):
+        # Random horizontal flip (sagittal axis)
+        if torch.rand(1).item() > 0.5:
+            tensor = torch.flip(tensor, dims=[-1])
+        # Random Gaussian noise
+        if torch.rand(1).item() > 0.5:
+            noise = torch.randn_like(tensor) * 0.01
+            tensor = tensor + noise
+        # Random intensity scaling
+        if torch.rand(1).item() > 0.5:
+            scale = 0.9 + torch.rand(1).item() * 0.2  # [0.9, 1.1]
+            tensor = tensor * scale
+        return tensor
 
     def label_dist(self):
         label_names = {0: 'CN', 1: 'MCI', 2: 'AD'}

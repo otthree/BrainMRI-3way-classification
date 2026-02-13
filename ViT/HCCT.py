@@ -358,7 +358,7 @@ class ViTForClassfication(nn.Module):
             return (logits, all_attentions)
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv3d)):
             torch.nn.init.normal_(module.weight, mean=0.0, std=self.config["initializer_range"])
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
